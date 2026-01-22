@@ -56,12 +56,12 @@
 ;; Optional dependencies:
 ;;   - vterm: For better terminal emulation in interactive mode (GUI only)
 ;;     Install with: M-x package-install RET vterm RET
-;;     Note: vterm requires GUI Emacs. In terminal mode, shell-mode is used automatically.
+;;     Note: vterm requires GUI Emacs.  In terminal mode, shell-mode is used automatically.
 ;;
 ;; Terminal compatibility:
-;;   This package works in both GUI and terminal Emacs. All functions are compatible
-;;   with terminal mode. Interactive prompts use standard Emacs minibuffer which
-;;   works in all environments. Browser-based authentication (login) will open
+;;   This package works in both GUI and terminal Emacs.  All functions are compatible
+;;   with terminal mode.  Interactive prompts use standard Emacs minibuffer which
+;;   works in all environments.  Browser-based authentication (login) will open
 ;;   your system's default browser even when running in terminal mode.
 
 ;;; Code:
@@ -77,7 +77,7 @@
   :group 'cursor-agent)
 
 (defcustom cursor-agent-default-model nil
-  "Default model to use. Set to nil to use CLI default.
+  "Default model to use.  Set to nil to use CLI default.
 Available models can be listed with 'agent models'."
   :type '(choice (const nil) string)
   :group 'cursor-agent)
@@ -292,7 +292,7 @@ Shows a message with status and returns t if ready, nil otherwise."
 PROMPT is the prompt to send to the agent.
 MODEL optionally specifies the model to use (defaults to cursor-agent-default-model).
 OUTPUT-FORMAT optionally specifies output format (defaults to cursor-agent-default-output-format).
-ANSI color codes are automatically handled by compilation-mode."
+ANSI color codes are automatically handled by `compilation-mode'."
   (interactive
    (list
     (read-string "Prompt: ")
@@ -338,7 +338,7 @@ vterm automatically handles OSC escape sequences (like window title changes)."
   (unless (cursor-agent-installed-p)
     (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
         (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found. Run 'M-x cursor-agent-install' to install.")))
+      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
   ;; Try to use vterm if available and in GUI mode, otherwise fall back to shell-mode
   ;; vterm may not work well in terminal Emacs, so prefer shell-mode in terminal
   (if (and (display-graphic-p)
@@ -414,7 +414,7 @@ If not provided, resumes the most recent conversation."
   (unless (cursor-agent-installed-p)
     (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
         (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found. Run 'M-x cursor-agent-install' to install.")))
+      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
   (let ((buffer-name "*cursor-agent-interactive*")
         (resume-arg (if chat-id
                         (format " --resume=%s" chat-id)
@@ -446,7 +446,7 @@ Opens a buffer showing the list of available sessions."
   (unless (cursor-agent-installed-p)
     (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
         (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found. Run 'M-x cursor-agent-install' to install.")))
+      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
   (let ((buffer-name "*cursor-agent-sessions*")
         (output (shell-command-to-string (format "%s ls" cursor-agent-command))))
     (with-current-buffer (get-buffer-create buffer-name)
@@ -459,13 +459,13 @@ Opens a buffer showing the list of available sessions."
 ;;;###autoload
 (defun cursor-agent-login ()
   "Authenticate with cursor-agent using browser flow.
-Opens browser for authentication. Works in both GUI and terminal Emacs.
+Opens browser for authentication.  Works in both GUI and terminal Emacs.
 In terminal mode, the browser will open in your system's default browser."
   (interactive)
   (unless (cursor-agent-installed-p)
     (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
         (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found. Run 'M-x cursor-agent-install' to install.")))
+      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
   (let ((buffer-name "*cursor-agent-login*"))
     (with-current-buffer (get-buffer-create buffer-name)
       (erase-buffer)
@@ -483,7 +483,7 @@ In terminal mode, the browser will open in your system's default browser."
   (unless (cursor-agent-installed-p)
     (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
         (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found. Run 'M-x cursor-agent-install' to install.")))
+      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
   (let ((buffer-name "*cursor-agent-status*")
         (output (shell-command-to-string (format "%s status" cursor-agent-command))))
     (with-current-buffer (get-buffer-create buffer-name)
@@ -500,7 +500,7 @@ In terminal mode, the browser will open in your system's default browser."
   (unless (cursor-agent-installed-p)
     (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
         (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found. Run 'M-x cursor-agent-install' to install.")))
+      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
   (let ((buffer-name "*cursor-agent-models*")
         (output (shell-command-to-string (format "%s models" cursor-agent-command))))
     (with-current-buffer (get-buffer-create buffer-name)
@@ -518,7 +518,7 @@ MCP (Model Context Protocol) servers extend cursor-agent functionality."
   (unless (cursor-agent-installed-p)
     (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
         (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found. Run 'M-x cursor-agent-install' to install.")))
+      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
   (let ((buffer-name "*cursor-agent-mcp*")
         (output (shell-command-to-string (format "%s mcp list" cursor-agent-command))))
     (with-current-buffer (get-buffer-create buffer-name)
@@ -538,7 +538,7 @@ Works in both GUI and terminal Emacs."
   (unless (cursor-agent-installed-p)
     (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
         (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found. Run 'M-x cursor-agent-install' to install.")))
+      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
   ;; Try vterm first if in GUI mode, fallback to shell-mode (works in terminal)
   (if (and (display-graphic-p)
            (require 'vterm nil t))
@@ -575,7 +575,7 @@ Works in both GUI and terminal Emacs."
   (unless (cursor-agent-installed-p)
     (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
         (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found. Run 'M-x cursor-agent-install' to install.")))
+      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
   (let ((buffer-name "*cursor-agent-update*"))
     (with-current-buffer (get-buffer-create buffer-name)
       (erase-buffer)
