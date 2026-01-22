@@ -1,0 +1,211 @@
+---
+description: MELPA submission and maintenance standards for Emacs Lisp packages
+globs: **/*.el
+alwaysApply: false
+---
+
+# MELPA Compliance Standards
+
+This rule enforces MELPA submission and maintenance standards based on [MELPA CONTRIBUTING.org](https://github.com/melpa/melpa/blob/master/CONTRIBUTING.org).
+
+## Code Quality Requirements
+
+### Lexical Binding
+- **Always enable lexical binding** in every `.el` file:
+  ```elisp
+  ;;; package.el --- Description -*- lexical-binding: t; -*-
+  ```
+
+### Function References
+- Use `#'function-name` (function form) instead of `'function-name` (quote form) for function references:
+  ```elisp
+  ;; ❌ BAD
+  (mapcar 'my-function list)
+  
+  ;; ✅ GOOD
+  (mapcar #'my-function list)
+  ```
+
+### Function Length
+- **Avoid long functions**: Break down functions longer than ~50 lines into smaller, well-named helper functions
+- Each function should have a single, clear responsibility
+- Use descriptive function names with package prefix (e.g., `cursor-agent--helper-function`)
+
+### Face Definitions
+- **Never** define a face that both `:inherit` another face AND override attributes (bold, underline, inverse-video)
+- Best practice: Only `:inherit` faces and let users customize attributes
+
+## Package Metadata
+
+### Required Header Fields
+Every package must have proper header metadata:
+```elisp
+;;; package-name.el --- Description -*- lexical-binding: t; -*-
+
+;; Author: Name
+;; Maintainer: Name or GitHub username
+;; Version: X.Y.Z
+;; Package-Requires: ((emacs "27.1") (dependency "version"))
+;; Keywords: keyword1, keyword2
+;; URL: https://github.com/user/package-name
+```
+
+### Package Requirements
+- Package name must match filename (without `.el`)
+- `Package-Requires` must list all dependencies
+- Version format: `X.Y.Z` (semantic versioning)
+
+## Documentation Standards
+
+### Docstrings
+- Use `checkdoc` to verify documentation strings
+- Error messages should **NOT** end with periods
+- Error messages should start with capital letters
+- Use two spaces after periods in docstrings (Emacs convention)
+- Quote Lisp symbols in docstrings: `` `symbol-name' ``
+
+```elisp
+;; ❌ BAD
+(defun my-function ()
+  "Does something. Returns a value.")
+
+;; ✅ GOOD
+(defun my-function ()
+  "Does something.  Returns a value.")
+```
+
+### Error Messages
+```elisp
+;; ❌ BAD
+(user-error "Something went wrong.")
+
+;; ✅ GOOD
+(user-error "Something went wrong")
+```
+
+## Code Style
+
+### Emacs Lisp Conventions
+- Follow [Emacs Lisp Style Guide](https://github.com/bbatsov/emacs-lisp-style-guide)
+- Follow [Emacs Lisp Conventions](https://www.gnu.org/software/emacs/manual/html_node/elisp/Tips.html)
+- Use `package-lint` to check package metadata
+- Use `flycheck` or `flymake` for syntax checking
+
+### Autoload Cookies
+- Use `;;;###autoload` for interactive commands and user-facing functions
+- Place autoload cookie directly before the `defun` or `defcustom`
+
+## License Requirements
+
+### GPL Compatible License
+- Must use GPL-compatible license (preferably GPL v3)
+- License boilerplate must appear **above** `;;; Commentary:` section
+- Repository must contain `LICENSE` or `COPYING` file
+- License file must be detectable by common tooling (e.g., licensee)
+
+### License Header Format
+```elisp
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+```
+
+## File Organization
+
+### Single File Packages
+- MELPA only looks at the main `.el` file (or `-pkg.el` if provided, though discouraged)
+- If you have optional parts with different dependencies, publish them as **separate packages**
+
+### README Files
+- Avoid README files unless they have interactive commands to display them
+- If README exists, provide an interactive command: `M-x package-name-readme`
+- Exception: `.info` files are automatically added to Emacs info index
+
+## Quality Checks
+
+### Before Submitting
+Always run these tools:
+1. **package-lint**: `M-x package-lint-batch-and-exit`
+2. **checkdoc**: `M-x checkdoc-file`
+3. **flycheck/flymake**: For syntax errors
+
+### Common Issues to Fix
+- [ ] Lexical binding enabled
+- [ ] No periods in error messages
+- [ ] Function references use `#'` not `'`
+- [ ] Long functions broken down
+- [ ] Package metadata complete and correct
+- [ ] License header above Commentary section
+- [ ] All dependencies in Package-Requires
+- [ ] Docstrings follow Emacs conventions
+
+## Testing
+
+### Recipe Testing
+Before submitting to MELPA:
+```bash
+# Build the recipe
+make recipes/package-name
+
+# Test in sandbox
+make sandbox INSTALL=package-name
+```
+
+### Installation Testing
+- Test package installation: `M-x package-install-file`
+- Verify all interactive commands work
+- Test in both GUI and terminal Emacs (if applicable)
+
+## Repository Requirements
+
+### SCM Requirements
+- Must be in Git or Mercurial repository
+- Must be the official repository (not a fork, except extreme circumstances)
+- Each package in its own dedicated repository
+- Repository must be public and accessible
+
+### Version Tags
+- Use semantic versioning tags for stable releases
+- Tag format compatible with `version-to-list` function
+- Example: `v1.0.0` or `1.0.0`
+
+## Maintenance
+
+### Recipe Maintenance
+- Update recipe if repository moves
+- Use GitHub repository transfer mechanism when possible
+- Update README at old location with link to new location
+
+### Active Maintenance
+- Package should have reasonably active maintainer
+- MELPA is not a code dump - maintainers should respond to issues
+- Life happens, but reasonable maintenance efforts expected
+
+## Examples
+
+### Good Function Structure
+```elisp
+(defun cursor-agent--helper-function (arg)
+  "Helper function that does one specific thing.
+ARG is the argument to process.
+Returns processed result."
+  ;; Clear, focused implementation
+  )
+
+(defun cursor-agent-main-function ()
+  "Main function that orchestrates the work."
+  (let ((result (cursor-agent--helper-function arg)))
+    ;; Use helper results
+    ))
+```
+
+### Good Error Handling
+```elisp
+(defun my-function ()
+  "Does something important."
+  (unless (condition)
+    (user-error "Condition not met.  Please check setup"))
+  ;; Continue...
+  )
+```
