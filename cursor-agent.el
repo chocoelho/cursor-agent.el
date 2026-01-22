@@ -586,6 +586,24 @@ Works in both GUI and terminal Emacs."
      buffer-name)
     (pop-to-buffer buffer-name)))
 
+;;;###autoload
+(defun cursor-agent-readme ()
+  "Display the README file for cursor-agent.
+Opens the README.md file in a new buffer for viewing."
+  (interactive)
+  (let ((readme-file (expand-file-name
+                      "README.md"
+                      (file-name-directory
+                       (or (locate-library "cursor-agent" t)
+                           (buffer-file-name)
+                           default-directory)))))
+    (if (file-exists-p readme-file)
+        (progn
+          (find-file readme-file)
+          (view-mode)
+          (message "Press 'q' to quit view mode"))
+      (user-error "README.md not found.  Please ensure the package is properly installed"))))
+
 (provide 'cursor-agent)
 
 ;;; cursor-agent.el ends here
