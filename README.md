@@ -341,6 +341,24 @@ The package will automatically fall back to `shell-mode`. For better experience,
 M-x package-install RET vterm RET
 ```
 
+## Testing
+
+Tests are included in `cursor-agent-test.el` using ERT (Emacs Lisp Regression Testing). Run tests locally:
+
+```elisp
+M-x load-file RET cursor-agent-test.el RET
+M-x ert RET cursor-agent-test-.* RET
+```
+
+Or from the command line:
+
+```bash
+emacs --batch -l ert -l cursor-agent.el -l cursor-agent-test.el \
+  --eval "(ert-run-tests-batch-and-exit 'cursor-agent-test-.* t)"
+```
+
+Tests run automatically on GitHub Actions for all pushes and pull requests.
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.

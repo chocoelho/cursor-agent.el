@@ -14,11 +14,12 @@ tramp
 .DS_Store
 Thumbs.db
 
-# IDE
-.vscode/
-.idea/
-
 # Temporary files
 *.tmp
 *.bak
 *.swp
+
+# Test artifacts
+test-results.xml
+test-output.log
+*.log
