@@ -96,6 +96,7 @@ M-x package-install-file RET /path/to/cursor-agent.el RET
 | `cursor-agent-mcp-list` | List MCP servers |
 | `cursor-agent-shell-mode` | Start shell mode |
 | `cursor-agent-update` | Update Cursor CLI |
+| `cursor-agent-readme` | Display the README file |
 
 ### Example: Processing a Code Region
 
@@ -291,14 +292,25 @@ The recommended keybinding layout for Doom Emacs:
 
 ## Compatibility
 
-This package is designed to work with:
+This package is **designed and tested primarily for vanilla Emacs**. It uses only standard Emacs features and has no distribution-specific dependencies.
 
-- Vanilla Emacs 27.1+ (GUI and terminal)
-- Doom Emacs (fully supported - see Doom Emacs Integration section above)
-- Spacemacs
-- Any Emacs distribution
+### Supported Environments
 
-The package uses only standard Emacs features and has no distribution-specific dependencies.
+- **Vanilla Emacs 27.1+** (primary target)
+  - GUI Emacs (X11, macOS, Windows)
+  - Terminal Emacs (interactive and non-interactive sessions)
+- **Emacs distributions** (compatible but not specifically targeted)
+  - Doom Emacs (see Doom Emacs Integration section above)
+  - Spacemacs
+  - Any other Emacs distribution
+
+### Design Principles
+
+- **Vanilla-first**: All code is written and tested against vanilla Emacs
+- **Standard features only**: Uses only built-in Emacs functionality
+- **No distribution assumptions**: Does not rely on features from Doom Emacs, Spacemacs, or other distributions
+- **Universal compatibility**: Works in both GUI and terminal Emacs environments
+- **Graceful fallbacks**: Automatically falls back to standard Emacs features when optional packages (like `vterm`) are unavailable
 
 ## Documentation
 
