@@ -1,0 +1,140 @@
+---
+description: Vanilla Emacs compatibility requirements for cursor-agent.el
+globs: **/*.el
+alwaysApply: false
+---
+
+# Vanilla Emacs Compatibility
+
+This package must be designed and maintained for **vanilla Emacs first**. All code should work in standard Emacs without any dependencies on custom distributions.
+
+## Core Principles
+
+### 1. Vanilla Emacs is Primary Target
+- All code must be written and tested against **vanilla Emacs 27.1+**
+- Do not assume features from Doom Emacs, Spacemacs, or other distributions
+- Do not use distribution-specific functions, macros, or variables
+- Test in a clean Emacs installation before considering distribution compatibility
+
+### 2. Standard Emacs Features Only
+- Use only built-in Emacs functionality
+- Prefer standard Emacs libraries over third-party packages
+- When optional packages are used (e.g., `vterm`), provide graceful fallbacks to built-in alternatives
+- Never require distribution-specific packages
+
+### 3. GUI and Terminal Compatibility
+- **All functions must work in both GUI and terminal Emacs**
+- Test in both environments:
+  - GUI Emacs (X11, macOS, Windows)
+  - Terminal Emacs (interactive sessions)
+  - Terminal Emacs (non-interactive/daemon mode)
+- Use `(display-graphic-p)` to detect GUI vs terminal, but ensure both paths work
+- Interactive prompts must use standard minibuffer (works everywhere)
+- Browser-based operations should work in terminal mode (opens system default browser)
+
+### 4. No Distribution Assumptions
+- **Never** check for Doom Emacs, Spacemacs, or other distributions
+- **Never** use distribution-specific functions like:
+  - `doom-*` functions
+  - `spacemacs-*` functions
+  - Distribution-specific macros or utilities
+- **Never** require distribution-specific packages
+- If a feature exists in vanilla Emacs, use it instead of a distribution alternative
+
+### 5. Graceful Fallbacks
+- When optional packages are unavailable, fall back to built-in alternatives
+- Example: If `vterm` is not available, use `shell-mode` (built-in)
+- Never fail if optional packages are missing
+- Always provide a working path with standard Emacs features
+
+## Code Examples
+
+### ✅ GOOD: Vanilla Emacs Compatible
+
+```elisp
+;; Check for GUI vs terminal
+(if (and (display-graphic-p)
+         (require 'vterm nil t))
+    ;; Use vterm if available in GUI
+    (vterm buffer-name)
+  ;; Fallback to built-in shell-mode (works everywhere)
+  (with-current-buffer (get-buffer-create buffer-name)
+    (shell-mode)))
+
+;; Use standard Emacs functions
+(executable-find "agent")  ; Built-in
+(shell-command-to-string ...)  ; Built-in
+(async-shell-command ...)  ; Built-in
+```
+
+### ❌ BAD: Distribution-Specific
+
+```elisp
+;; ❌ BAD: Checking for Doom Emacs
+(when (boundp 'doom-version)
+  (doom-something))
+
+;; ❌ BAD: Using distribution-specific functions
+(spacemacs/do-something)
+
+;; ❌ BAD: Requiring distribution packages
+(require 'doom-something)
+
+;; ❌ BAD: Assuming GUI-only features work in terminal
+(unless (display-graphic-p)
+  (error "This requires GUI Emacs"))  ; Should provide terminal alternative
+```
+
+## Testing Requirements
+
+### Before Committing
+1. Test in vanilla Emacs (GUI)
+2. Test in vanilla Emacs (terminal)
+3. Verify no distribution-specific code
+4. Verify graceful fallbacks work
+5. Ensure all interactive commands work in both environments
+
+### Test Checklist
+- [ ] Works in vanilla Emacs GUI
+- [ ] Works in vanilla Emacs terminal (interactive)
+- [ ] Works in vanilla Emacs terminal (non-interactive/daemon)
+- [ ] No distribution-specific code
+- [ ] Graceful fallbacks for optional packages
+- [ ] All interactive commands work in both GUI and terminal
+
+## Documentation
+
+- Always mention vanilla Emacs compatibility first
+- Note that distributions are compatible but not specifically targeted
+- Document any optional dependencies with clear fallback behavior
+- Emphasize that the package uses only standard Emacs features
+
+## Compatibility Notes
+
+While this package works with Doom Emacs, Spacemacs, and other distributions, it is **not designed for them**. The package:
+
+- Does not require any distribution-specific features
+- Does not optimize for distribution-specific workflows
+- May work better in vanilla Emacs (primary development target)
+- Should work in distributions, but issues specific to distributions are lower priority
+
+## Key Functions to Use
+
+### Environment Detection
+```elisp
+(display-graphic-p)  ; Check if GUI Emacs
+```
+
+### Standard Emacs Functions
+- `executable-find` - Find executables
+- `shell-command-to-string` - Run shell commands
+- `async-shell-command` - Run async shell commands
+- `comint-mode` / `shell-mode` - Terminal emulation
+- `compilation-mode` - For output buffers
+- `getenv` - Environment variables
+- `start-process` - Process management
+
+### Optional Packages (with fallbacks)
+- `vterm` - Better terminal emulation (GUI only, fallback to `shell-mode`)
+- Always check availability: `(require 'vterm nil t)`
+- Always provide fallback to built-in alternatives
