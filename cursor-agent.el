@@ -129,6 +129,99 @@ Updates cached status."
         (setq cursor-agent-authenticated-p nil)
         nil))))
 
+(defun cursor-agent--local-bin-in-path-p ()
+  "Check if ~/.local/bin is in PATH.
+Returns t if found, nil otherwise."
+  (let ((local-bin (expand-file-name "~/.local/bin"))
+        (path (getenv "PATH")))
+    (or (string-match-p (regexp-quote local-bin) path)
+        (string-match-p (regexp-quote (expand-file-name "~/.local/bin")) path))))
+
+(defun cursor-agent--get-path-instruction (shell)
+  "Get PATH configuration instruction for SHELL.
+Returns a string with instructions for adding ~/.local/bin to PATH."
+  (cond
+   ((string-match-p "zsh" shell)
+    "  echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.zshrc\n  source ~/.zshrc\n")
+   ((string-match-p "bash" shell)
+    "  echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.bashrc\n  source ~/.bashrc\n")
+   (t
+    "  Add ~/.local/bin to your PATH in your shell configuration file\n")))
+
+(defun cursor-agent--prepare-install-buffer (buffer-name shell path-in-shell)
+  "Prepare installation buffer with instructions.
+BUFFER-NAME is the buffer to prepare.
+SHELL is the user's shell.
+PATH-IN-SHELL indicates if ~/.local/bin is in PATH."
+  (with-current-buffer (get-buffer-create buffer-name)
+    (erase-buffer)
+    (insert "Installing Cursor CLI Agent...\n")
+    (insert "================================\n\n")
+    (insert "This will:\n")
+    (insert "1. Download the official installation script\n")
+    (insert "2. Run the installation script\n")
+    (insert "3. Install agent to ~/.local/bin/\n\n")
+    
+    (unless path-in-shell
+      (insert "[WARNING] ~/.local/bin is not in your PATH.\n")
+      (insert "After installation, you may need to add it to your shell config:\n")
+      (insert (cursor-agent--get-path-instruction shell))
+      (insert "\n"))
+    
+    (insert "Running installation script...\n\n")
+    (compilation-mode)))
+
+(defun cursor-agent--handle-install-success (buffer-name)
+  "Handle successful installation.
+BUFFER-NAME is the installation buffer."
+  (with-current-buffer buffer-name
+    (goto-char (point-max))
+    (insert "\n" (make-string 50 ?=) "\n")
+    (insert "Installation completed!\n\n")
+    (insert "[OK] Cursor Agent installed successfully!\n\n")
+    (insert "Next steps:\n")
+    (insert "1. If ~/.local/bin was not in PATH, restart your shell or Emacs\n")
+    (insert "2. Run 'M-x cursor-agent-login' to authenticate\n")
+    (insert "3. Run 'M-x cursor-agent-verify-setup' to verify everything is working\n")
+    (message "[OK] Cursor Agent installed successfully! Run 'M-x cursor-agent-login' to authenticate.")
+    
+    ;; Offer to verify setup
+    (when (y-or-n-p "Verify installation now? ")
+      (cursor-agent-verify-setup)
+      (when (and (cursor-agent-installed-p)
+                 (not (cursor-agent-check-auth)))
+        (when (y-or-n-p "Would you like to authenticate now? ")
+          (cursor-agent-login))))))
+
+(defun cursor-agent--handle-install-failure (buffer-name)
+  "Handle installation failure.
+BUFFER-NAME is the installation buffer."
+  (with-current-buffer buffer-name
+    (goto-char (point-max))
+    (insert "\n" (make-string 50 ?=) "\n")
+    (insert "Installation completed!\n\n")
+    (insert "[WARNING] Installation may have completed, but agent command not found.\n\n")
+    (insert "Possible issues:\n")
+    (insert "1. ~/.local/bin is not in your PATH\n")
+    (insert "2. Installation script failed silently\n\n")
+    (insert "Try:\n")
+    (insert "- Restart your shell or Emacs\n")
+    (insert "- Manually add ~/.local/bin to PATH\n")
+    (insert "- Run: curl https://cursor.com/install -fsS | bash\n")
+    (message "[WARNING] Installation completed, but agent not found in PATH. You may need to restart Emacs.")))
+
+(defun cursor-agent--install-sentinel (buffer-name)
+  "Return a process sentinel for installation.
+BUFFER-NAME is the installation buffer."
+  (lambda (proc event)
+    (when (string-match-p "finished\\|exited" event)
+      ;; Wait a moment for PATH to update, then verify
+      (sit-for 1)
+      (let ((installed (cursor-agent-installed-p)))
+        (if installed
+            (cursor-agent--handle-install-success buffer-name)
+          (cursor-agent--handle-install-failure buffer-name))))))
+
 ;;;###autoload
 (defun cursor-agent-install ()
   "Install Cursor CLI Agent.
@@ -149,50 +242,16 @@ After installation, prompts to verify setup and optionally authenticate."
     
     ;; Check for curl
     (unless (executable-find "curl")
-      (user-error "curl is required for installation. Please install curl first."))
+      (user-error "curl is required for installation.  Please install curl first"))
     
-    ;; Check for shell
-    (let ((shell (getenv "SHELL"))
+    ;; Setup installation
+    (let ((shell (or (getenv "SHELL") "/bin/bash"))
           (install-script "curl https://cursor.com/install -fsS | bash")
           (buffer-name "*cursor-agent-install*")
-          (local-bin (expand-file-name "~/.local/bin"))
-          (path-in-shell nil))
+          (path-in-shell (cursor-agent--local-bin-in-path-p)))
       
-      (unless shell
-        (setq shell "/bin/bash"))
-      
-      ;; Check if ~/.local/bin is in PATH
-      (let ((path (getenv "PATH")))
-        (setq path-in-shell (or (string-match-p (regexp-quote local-bin) path)
-                                (string-match-p (regexp-quote (expand-file-name "~/.local/bin")) path))))
-      
-      ;; Show installation buffer
-      (with-current-buffer (get-buffer-create buffer-name)
-        (erase-buffer)
-        (insert "Installing Cursor CLI Agent...\n")
-        (insert "================================\n\n")
-        (insert "This will:\n")
-        (insert "1. Download the official installation script\n")
-        (insert "2. Run the installation script\n")
-        (insert "3. Install agent to ~/.local/bin/\n\n")
-        
-        (unless path-in-shell
-          (insert "[WARNING] ~/.local/bin is not in your PATH.\n")
-          (insert "After installation, you may need to add it to your shell config:\n")
-          (cond
-           ((string-match-p "zsh" shell)
-            (insert "  echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.zshrc\n")
-            (insert "  source ~/.zshrc\n"))
-           ((string-match-p "bash" shell)
-            (insert "  echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.bashrc\n")
-            (insert "  source ~/.bashrc\n"))
-           (t
-            (insert "  Add ~/.local/bin to your PATH in your shell configuration file\n")))
-          (insert "\n"))
-        
-        (insert "Running installation script...\n\n")
-        (compilation-mode))
-      
+      ;; Prepare installation buffer
+      (cursor-agent--prepare-install-buffer buffer-name shell path-in-shell)
       (pop-to-buffer buffer-name)
       
       ;; Run installation
@@ -202,44 +261,7 @@ After installation, prompts to verify setup and optionally authenticate."
                       shell
                       "-c"
                       install-script)))
-        (set-process-sentinel
-         process
-         (lambda (proc event)
-           (when (string-match-p "finished\\|exited" event)
-             (with-current-buffer buffer-name
-               (goto-char (point-max))
-               (insert "\n" (make-string 50 ?=) "\n")
-               (insert "Installation completed!\n\n")
-               
-               ;; Wait a moment for PATH to update, then verify
-               (sit-for 1)
-               (let ((installed (cursor-agent-installed-p)))
-                 (if installed
-                     (progn
-                       (insert "[OK] Cursor Agent installed successfully!\n\n")
-                       (insert "Next steps:\n")
-                       (insert "1. If ~/.local/bin was not in PATH, restart your shell or Emacs\n")
-                       (insert "2. Run 'M-x cursor-agent-login' to authenticate\n")
-                       (insert "3. Run 'M-x cursor-agent-verify-setup' to verify everything is working\n")
-                       (message "[OK] Cursor Agent installed successfully! Run 'M-x cursor-agent-login' to authenticate.")
-                       
-                       ;; Offer to verify setup
-                       (when (y-or-n-p "Verify installation now? ")
-                         (cursor-agent-verify-setup)
-                         (when (and (cursor-agent-installed-p)
-                                     (not (cursor-agent-check-auth)))
-                           (when (y-or-n-p "Would you like to authenticate now? ")
-                             (cursor-agent-login)))))
-                   (progn
-                     (insert "[WARNING] Installation may have completed, but agent command not found.\n\n")
-                     (insert "Possible issues:\n")
-                     (insert "1. ~/.local/bin is not in your PATH\n")
-                     (insert "2. Installation script failed silently\n\n")
-                     (insert "Try:\n")
-                     (insert "- Restart your shell or Emacs\n")
-                     (insert "- Manually add ~/.local/bin to PATH\n")
-                     (insert "- Run: curl https://cursor.com/install -fsS | bash\n")
-                     (message "[WARNING] Installation completed, but agent not found in PATH. You may need to restart Emacs."))))))))))
+        (set-process-sentinel process (cursor-agent--install-sentinel buffer-name)))
       
       ;; Return nil since installation is async
       nil)))
