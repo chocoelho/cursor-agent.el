@@ -126,8 +126,42 @@ Updates cached status."
           (progn
             (setq cursor-agent-authenticated-p t)
             t)
-        (setq cursor-agent-authenticated-p nil)
-        nil))))
+      (setq cursor-agent-authenticated-p nil)
+      nil))))
+
+(defun cursor-agent--run-command-in-compilation-buffer (command buffer-name header-text)
+  "Run COMMAND in a compilation buffer with proper ANSI color handling.
+COMMAND is the shell command to execute.
+BUFFER-NAME is the name of the buffer to use.
+HEADER-TEXT is the text to insert at the start of the buffer.
+Sets the process filter to compilation-filter to ensure ANSI colors are handled."
+  (let ((buffer (get-buffer-create buffer-name)))
+    (with-current-buffer buffer
+      (erase-buffer)
+      (when header-text
+        (insert header-text))
+      (compilation-mode))
+    ;; Use async-shell-command but set the filter to compilation-filter
+    ;; to ensure compilation-filter-hook runs, which handles ANSI color codes
+    (let ((process (async-shell-command command buffer-name)))
+      (when process
+        (set-process-filter process 'compilation-filter)))
+    (pop-to-buffer buffer-name)))
+
+(defun cursor-agent--run-list-command (command buffer-name header-text)
+  "Helper function to run a list command with installation check.
+COMMAND is the shell command to execute.
+BUFFER-NAME is the name of the buffer to use.
+HEADER-TEXT is the text to insert at the start of the buffer.
+Checks if cursor-agent is installed before running the command."
+  (unless (cursor-agent-installed-p)
+    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
+        (cursor-agent-install)
+      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
+  (cursor-agent--run-command-in-compilation-buffer
+   command
+   buffer-name
+   header-text))
 
 (defun cursor-agent--local-bin-in-path-p ()
   "Check if ~/.local/bin is in PATH.
@@ -213,7 +247,7 @@ BUFFER-NAME is the installation buffer."
 (defun cursor-agent--install-sentinel (buffer-name)
   "Return a process sentinel for installation.
 BUFFER-NAME is the installation buffer."
-  (lambda (proc event)
+  (lambda (_proc event)
     (when (string-match-p "finished\\|exited" event)
       ;; Wait a moment for PATH to update, then verify
       (sit-for 1)
@@ -272,7 +306,8 @@ After installation, prompts to verify setup and optionally authenticate."
 Shows a message with status and returns t if ready, nil otherwise."
   (interactive)
   (let ((installed (cursor-agent-installed-p))
-        (authenticated (when installed (cursor-agent-check-auth))))
+        (authenticated (when (and installed (fboundp 'cursor-agent-check-auth))
+                         (cursor-agent-check-auth))))
     (cond
      ((not installed)
       (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
@@ -319,13 +354,10 @@ ANSI color codes are automatically handled by `compilation-mode'."
                           model-arg
                           format-arg
                           force-arg)))
-    (with-current-buffer (get-buffer-create buffer-name)
-      (erase-buffer)
-      (insert (format "Running: %s\n\n" command))
-      (compilation-mode))
-    ;; compilation-mode automatically handles ANSI colors via compilation-filter-hook
-    (async-shell-command command buffer-name)
-    (pop-to-buffer buffer-name)))
+    (cursor-agent--run-command-in-compilation-buffer
+     command
+     buffer-name
+     (format "Running: %s\n\n" command))))
 
 ;;;###autoload
 (defun cursor-agent-interactive (&optional initial-prompt)
@@ -397,13 +429,10 @@ ANSI color codes are automatically handled by compilation-mode."
                           cursor-agent-command
                           model-arg
                           force-arg)))
-    (with-current-buffer (get-buffer-create buffer-name)
-      (erase-buffer)
-      (insert (format "Processing region with cursor-agent:\n\n%s\n\n" text))
-      (compilation-mode))
-    ;; compilation-mode automatically handles ANSI colors via compilation-filter-hook
-    (async-shell-command command buffer-name)
-    (pop-to-buffer buffer-name)))
+    (cursor-agent--run-command-in-compilation-buffer
+     command
+     buffer-name
+     (format "Processing region with cursor-agent:\n\n%s\n\n" text))))
 
 ;;;###autoload
 (defun cursor-agent-resume (&optional chat-id)
@@ -441,20 +470,13 @@ If not provided, resumes the most recent conversation."
 ;;;###autoload
 (defun cursor-agent-list-sessions ()
   "List all previous cursor-agent conversations.
-Opens a buffer showing the list of available sessions."
+Opens a buffer showing the list of available sessions.
+ANSI color codes are automatically handled by `compilation-mode'."
   (interactive)
-  (unless (cursor-agent-installed-p)
-    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
-        (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
-  (let ((buffer-name "*cursor-agent-sessions*")
-        (output (shell-command-to-string (format "%s ls" cursor-agent-command))))
-    (with-current-buffer (get-buffer-create buffer-name)
-      (erase-buffer)
-      (insert "Cursor Agent Sessions:\n\n")
-      (insert output)
-      (special-mode))
-    (pop-to-buffer buffer-name)))
+  (cursor-agent--run-list-command
+   (format "%s ls" cursor-agent-command)
+   "*cursor-agent-sessions*"
+   "Cursor Agent Sessions:\n\n"))
 
 ;;;###autoload
 (defun cursor-agent-login ()
@@ -471,62 +493,44 @@ In terminal mode, the browser will open in your system's default browser."
       (erase-buffer)
       (insert "Authenticating with Cursor Agent...\n\n")
       (compilation-mode))
-    (async-shell-command
-     (format "%s login" cursor-agent-command)
-     buffer-name)
+    ;; Set process filter to compilation-filter to ensure ANSI colors are handled
+    (let ((process (async-shell-command
+                    (format "%s login" cursor-agent-command)
+                    buffer-name)))
+      (when process
+        (set-process-filter process 'compilation-filter)))
     (pop-to-buffer buffer-name)))
 
 ;;;###autoload
 (defun cursor-agent-status ()
-  "Show cursor-agent authentication status and configuration."
+  "Show cursor-agent authentication status and configuration.
+ANSI color codes are automatically handled by `compilation-mode'."
   (interactive)
-  (unless (cursor-agent-installed-p)
-    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
-        (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
-  (let ((buffer-name "*cursor-agent-status*")
-        (output (shell-command-to-string (format "%s status" cursor-agent-command))))
-    (with-current-buffer (get-buffer-create buffer-name)
-      (erase-buffer)
-      (insert "Cursor Agent Status:\n\n")
-      (insert output)
-      (special-mode))
-    (pop-to-buffer buffer-name)))
+  (cursor-agent--run-list-command
+   (format "%s status" cursor-agent-command)
+   "*cursor-agent-status*"
+   "Cursor Agent Status:\n\n"))
 
 ;;;###autoload
 (defun cursor-agent-list-models ()
-  "List all available models for cursor-agent."
+  "List all available models for cursor-agent.
+ANSI color codes are automatically handled by `compilation-mode'."
   (interactive)
-  (unless (cursor-agent-installed-p)
-    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
-        (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
-  (let ((buffer-name "*cursor-agent-models*")
-        (output (shell-command-to-string (format "%s models" cursor-agent-command))))
-    (with-current-buffer (get-buffer-create buffer-name)
-      (erase-buffer)
-      (insert "Available Cursor Agent Models:\n\n")
-      (insert output)
-      (special-mode))
-    (pop-to-buffer buffer-name)))
+  (cursor-agent--run-list-command
+   (format "%s models" cursor-agent-command)
+   "*cursor-agent-models*"
+   "Available Cursor Agent Models:\n\n"))
 
 ;;;###autoload
 (defun cursor-agent-mcp-list ()
   "List configured MCP servers for cursor-agent.
-MCP (Model Context Protocol) servers extend cursor-agent functionality."
+MCP (Model Context Protocol) servers extend cursor-agent functionality.
+ANSI color codes are automatically handled by `compilation-mode'."
   (interactive)
-  (unless (cursor-agent-installed-p)
-    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
-        (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
-  (let ((buffer-name "*cursor-agent-mcp*")
-        (output (shell-command-to-string (format "%s mcp list" cursor-agent-command))))
-    (with-current-buffer (get-buffer-create buffer-name)
-      (erase-buffer)
-      (insert "Cursor Agent MCP Servers:\n\n")
-      (insert output)
-      (special-mode))
-    (pop-to-buffer buffer-name)))
+  (cursor-agent--run-list-command
+   (format "%s mcp list" cursor-agent-command)
+   "*cursor-agent-mcp*"
+   "Cursor Agent MCP Servers:\n\n"))
 
 ;;;###autoload
 (defun cursor-agent-shell-mode ()
@@ -602,7 +606,7 @@ Opens the README.md file in a new buffer for viewing."
           (find-file readme-file)
           (view-mode)
           (message "Press 'q' to quit view mode"))
-      (user-error "README.md not found.  Please ensure the package is properly installed"))))
+      (user-error "README.md not found.  Please ensure the package is properly installed")))))
 
 (provide 'cursor-agent)
 
