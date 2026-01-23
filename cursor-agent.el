@@ -63,6 +63,14 @@
 ;;   with terminal mode.  Interactive prompts use standard Emacs minibuffer which
 ;;   works in all environments.  Browser-based authentication (login) will open
 ;;   your system's default browser even when running in terminal mode.
+;;
+;; Doom Emacs / Straight:
+;;   With Doom and Straight (:local-repo or :host github), only a subset of
+;;   commands may appear in M-x until the package is loaded.  Invoke any
+;;   autoloaded command (e.g. cursor-agent-install) once to load the file and
+;;   expose all commands.  Do not unload and reload this package in config
+;;   (e.g. in after! cursor-agent); that causes recursive load errors between
+;;   the Straight build path and the source path.
 
 ;;; Code:
 
@@ -78,13 +86,13 @@
 
 (defcustom cursor-agent-default-model nil
   "Default model to use.  Set to nil to use CLI default.
-Available models can be listed with 'agent models'."
+Available models can be listed with `agent models'."
   :type '(choice (const nil) string)
   :group 'cursor-agent)
 
 (defcustom cursor-agent-default-output-format "text"
   "Default output format for non-interactive commands.
-Options: 'text', 'json', 'stream-json'."
+Options: `text', `json', `stream-json'."
   :type '(choice (const "text") (const "json") (const "stream-json"))
   :group 'cursor-agent)
 
@@ -103,7 +111,7 @@ When enabled, allows agent to modify files without confirmation in print mode."
 ;;;###autoload
 (defun cursor-agent-installed-p ()
   "Check if cursor-agent CLI is installed.
-Returns t if 'agent' command is available, nil otherwise."
+Returns t if `agent' command is available, nil otherwise."
   (if (executable-find cursor-agent-command)
       (progn
         (setq cursor-agent-installed-p t)
