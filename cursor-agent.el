@@ -2,7 +2,7 @@
 
 ;; Author: Carlos Coelho
 ;; Maintainer: chocoelho
-;; Version: 1.1.0
+;; Version: 1.2.0
 ;; Package-Requires: ((emacs "27.1"))
 ;; Keywords: tools, ai, cursor, agent
 ;; URL: https://github.com/chocoelho/cursor-agent.el
