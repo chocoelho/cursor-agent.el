@@ -23,3 +23,6 @@ Thumbs.db
 test-results.xml
 test-output.log
 *.log
+
+# GitHub Actions local runner
+/bin/act
