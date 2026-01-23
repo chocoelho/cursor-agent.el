@@ -102,6 +102,30 @@ When enabled, allows agent to modify files without confirmation in print mode."
   :type 'boolean
   :group 'cursor-agent)
 
+(defcustom cursor-agent-list-commands-use-special-mode t
+  "Whether list commands should switch to special-mode after completion.
+When enabled (default), list command buffers switch to special-mode
+after the process completes, preserving the previous read-only/navigation
+behavior.  When disabled, buffers remain in compilation-mode.
+This only affects: cursor-agent-list-sessions, cursor-agent-status,
+cursor-agent-list-models, and cursor-agent-mcp-list."
+  :type 'boolean
+  :group 'cursor-agent)
+
+(defcustom cursor-agent-auto-install nil
+  "Behavior when cursor-agent CLI is not found.
+When nil (default), prompts user to install.
+When `ask', prompts user with y-or-n-p (same as nil).
+When `auto', automatically installs without prompting.
+When `skip', skips the check and lets commands fail naturally.
+When `once', checks once per session and caches the result."
+  :type '(choice (const :tag "Prompt user (default)" nil)
+                 (const :tag "Ask user" ask)
+                 (const :tag "Auto-install silently" auto)
+                 (const :tag "Skip check" skip)
+                 (const :tag "Check once per session" once))
+  :group 'cursor-agent)
+
 (defvar cursor-agent-installed-p nil
   "Cached status of cursor-agent installation.")
 
@@ -124,25 +148,35 @@ Returns t if `agent' command is available, nil otherwise."
   "Check if cursor-agent is authenticated.
 Returns t if authenticated, nil otherwise.
 Updates cached status."
+  (interactive)
   (if (not (cursor-agent-installed-p))
       (progn
         (setq cursor-agent-authenticated-p nil)
+        (when (called-interactively-p 'any)
+          (message "[ERROR] Cursor Agent CLI not found. Run 'M-x cursor-agent-install' to install."))
         nil)
-    (let ((status-output (shell-command-to-string
-                          (format "%s status 2>&1" cursor-agent-command))))
-      (if (string-match-p "authenticated\\|Authenticated" status-output)
+    (let* ((status-output (shell-command-to-string
+                            (format "%s status 2>&1" cursor-agent-command))))
+      (if (string-match-p "authenticated\\|Authenticated\\|Logged in\\|logged in" status-output)
           (progn
             (setq cursor-agent-authenticated-p t)
+            (when (called-interactively-p 'any)
+              (message "[OK] Cursor Agent is authenticated"))
             t)
-      (setq cursor-agent-authenticated-p nil)
-      nil))))
+        (progn
+          (setq cursor-agent-authenticated-p nil)
+          (when (called-interactively-p 'any)
+            (message "[WARNING] Cursor Agent not authenticated. Run 'M-x cursor-agent-login' to authenticate"))
+          nil)))))
 
-(defun cursor-agent--run-command-in-compilation-buffer (command buffer-name header-text)
+(defun cursor-agent--run-command-in-compilation-buffer (command buffer-name header-text &optional use-special-mode)
   "Run COMMAND in a compilation buffer with proper ANSI color handling.
 COMMAND is the shell command to execute.
 BUFFER-NAME is the name of the buffer to use.
 HEADER-TEXT is the text to insert at the start of the buffer.
-Sets the process filter to compilation-filter to ensure ANSI colors are handled."
+USE-SPECIAL-MODE, if non-nil, switches buffer to special-mode after
+process completes.  Sets the process filter to compilation-filter to
+ensure ANSI colors are handled."
   (let ((buffer (get-buffer-create buffer-name)))
     (with-current-buffer buffer
       (erase-buffer)
@@ -151,25 +185,66 @@ Sets the process filter to compilation-filter to ensure ANSI colors are handled.
       (compilation-mode))
     ;; Use async-shell-command but set the filter to compilation-filter
     ;; to ensure compilation-filter-hook runs, which handles ANSI color codes
-    (let ((process (async-shell-command command buffer-name)))
-      (when process
-        (set-process-filter process 'compilation-filter)))
-    (pop-to-buffer buffer-name)))
+    (pop-to-buffer buffer-name)
+    (let ((result (async-shell-command command buffer-name)))
+      ;; async-shell-command can return a process or a window
+      (let ((process (if (processp result) result
+                       (get-buffer-process buffer-name))))
+        (when process
+          (set-process-filter process 'compilation-filter)
+          ;; Store original sentinel if it exists, then set our sentinel
+          (let ((original-sentinel (process-sentinel process)))
+            (set-process-sentinel
+             process
+             (lambda (proc event)
+               ;; Call original sentinel if it exists
+               (when original-sentinel
+                 (funcall original-sentinel proc event))
+               ;; Our sentinel logic
+               (when (string-match-p "finished\\|exited" event)
+                 (with-current-buffer buffer-name
+                   (goto-char (point-max))
+                   (when use-special-mode
+                     (special-mode)
+                     (setq buffer-read-only t)))))))
+          ;; Ensure buffer is at end to follow output in real-time
+          (with-current-buffer buffer-name
+            (goto-char (point-max))))))))
+
+(defun cursor-agent--ensure-installed ()
+  "Ensure cursor-agent CLI is installed based on cursor-agent-auto-install.
+Returns t if installed or installation handled, nil if check was skipped.
+Raises user-error if installation is required but user declines."
+  (cond
+   ((cursor-agent-installed-p) t)
+   ((eq cursor-agent-auto-install 'skip) nil)
+   ((eq cursor-agent-auto-install 'once)
+    (setq cursor-agent-installed-p nil)  ; Reset cache
+    (cursor-agent-installed-p))  ; Check once and cache
+   ((eq cursor-agent-auto-install 'auto)
+    (cursor-agent-install)
+    t)
+   (t  ; nil or 'ask - prompt user
+    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
+        (progn
+          (cursor-agent-install)
+          t)
+      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))))
 
 (defun cursor-agent--run-list-command (command buffer-name header-text)
   "Helper function to run a list command with installation check.
 COMMAND is the shell command to execute.
 BUFFER-NAME is the name of the buffer to use.
 HEADER-TEXT is the text to insert at the start of the buffer.
-Checks if cursor-agent is installed before running the command."
-  (unless (cursor-agent-installed-p)
-    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
-        (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
+Checks if cursor-agent is installed before running the command.
+If cursor-agent-list-commands-use-special-mode is enabled, switches
+to special-mode after the process completes to preserve previous UX."
+  (cursor-agent--ensure-installed)
   (cursor-agent--run-command-in-compilation-buffer
    command
    buffer-name
-   header-text))
+   header-text
+   cursor-agent-list-commands-use-special-mode))
 
 (defun cursor-agent--local-bin-in-path-p ()
   "Check if ~/.local/bin is in PATH.
@@ -269,7 +344,8 @@ BUFFER-NAME is the installation buffer."
   "Install Cursor CLI Agent.
 Downloads and installs the agent using the official installation script.
 Checks for prerequisites (curl) and handles PATH configuration.
-After installation, prompts to verify setup and optionally authenticate."
+After installation, prompts to verify setup and optionally authenticate.
+"
   (interactive)
   ;; Check if already installed
   (cond
@@ -285,6 +361,11 @@ After installation, prompts to verify setup and optionally authenticate."
     ;; Check for curl
     (unless (executable-find "curl")
       (user-error "curl is required for installation.  Please install curl first"))
+    
+    ;; Confirm before starting installation
+    (unless (y-or-n-p "Install Cursor CLI Agent now? ")
+      (message "Installation cancelled")
+      nil)
     
     ;; Setup installation
     (let ((shell (or (getenv "SHELL") "/bin/bash"))
@@ -313,13 +394,14 @@ After installation, prompts to verify setup and optionally authenticate."
   "Verify cursor-agent installation and authentication.
 Shows a message with status and returns t if ready, nil otherwise."
   (interactive)
-  (let ((installed (cursor-agent-installed-p))
-        (authenticated (when (and installed (fboundp 'cursor-agent-check-auth))
-                         (cursor-agent-check-auth))))
+  (let* ((installed (if (eq cursor-agent-auto-install 'skip)
+                        (cursor-agent-installed-p)  ; Just check, don't prompt
+                      (cursor-agent--ensure-installed)))
+         (authenticated (when (and installed (fboundp 'cursor-agent-check-auth))
+                          (cursor-agent-check-auth))))
     (cond
      ((not installed)
-      (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
-          (cursor-agent-install)
+      (when (called-interactively-p 'any)
         (message "[ERROR] Cursor Agent CLI not found. Run 'M-x cursor-agent-install' to install."))
       nil)
      ((not authenticated)
@@ -333,9 +415,10 @@ Shows a message with status and returns t if ready, nil otherwise."
 (defun cursor-agent-prompt (prompt &optional model output-format)
   "Run cursor-agent with a prompt in a new buffer.
 PROMPT is the prompt to send to the agent.
-MODEL optionally specifies the model to use (defaults to cursor-agent-default-model).
-OUTPUT-FORMAT optionally specifies output format (defaults to cursor-agent-default-output-format).
-ANSI color codes are automatically handled by `compilation-mode'."
+MODEL optionally specifies the model to use (defaults to
+cursor-agent-default-model).  OUTPUT-FORMAT optionally specifies output
+format (defaults to cursor-agent-default-output-format).  ANSI color
+codes are automatically handled by `compilation-mode'."
   (interactive
    (list
     (read-string "Prompt: ")
@@ -375,10 +458,7 @@ Uses vterm if available in GUI mode for better terminal emulation,
 otherwise falls back to shell-mode (works in both GUI and terminal Emacs).
 vterm automatically handles OSC escape sequences (like window title changes)."
   (interactive "sInitial prompt (optional): ")
-  (unless (cursor-agent-installed-p)
-    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
-        (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
+  (cursor-agent--ensure-installed)
   ;; Try to use vterm if available and in GUI mode, otherwise fall back to shell-mode
   ;; vterm may not work well in terminal Emacs, so prefer shell-mode in terminal
   (if (and (display-graphic-p)
@@ -448,10 +528,7 @@ ANSI color codes are automatically handled by compilation-mode."
 CHAT-ID optionally specifies which conversation to resume.
 If not provided, resumes the most recent conversation."
   (interactive)
-  (unless (cursor-agent-installed-p)
-    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
-        (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
+  (cursor-agent--ensure-installed)
   (let ((buffer-name "*cursor-agent-interactive*")
         (resume-arg (if chat-id
                         (format " --resume=%s" chat-id)
@@ -492,22 +569,29 @@ ANSI color codes are automatically handled by `compilation-mode'."
 Opens browser for authentication.  Works in both GUI and terminal Emacs.
 In terminal mode, the browser will open in your system's default browser."
   (interactive)
-  (unless (cursor-agent-installed-p)
-    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
-        (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
+  (cursor-agent--ensure-installed)
   (let ((buffer-name "*cursor-agent-login*"))
-    (with-current-buffer (get-buffer-create buffer-name)
-      (erase-buffer)
-      (insert "Authenticating with Cursor Agent...\n\n")
-      (compilation-mode))
-    ;; Set process filter to compilation-filter to ensure ANSI colors are handled
-    (let ((process (async-shell-command
-                    (format "%s login" cursor-agent-command)
-                    buffer-name)))
+    (cursor-agent--run-command-in-compilation-buffer
+     (format "%s login" cursor-agent-command)
+     buffer-name
+     "Authenticating with Cursor Agent...\n\n"
+     nil)
+    ;; Add sentinel to update authentication status after login completes
+    ;; Chain with existing sentinel from helper function
+    (let ((process (get-buffer-process buffer-name)))
       (when process
-        (set-process-filter process 'compilation-filter)))
-    (pop-to-buffer buffer-name)))
+        (let ((original-sentinel (process-sentinel process)))
+          (set-process-sentinel
+           process
+           (lambda (proc event)
+             ;; Call original sentinel first
+             (when original-sentinel
+               (funcall original-sentinel proc event))
+             ;; Then update authentication status
+              (when (string-match-p "finished\\|exited" event)
+                ;; Wait a moment for auth to be saved, then check status
+                (sit-for 0.5)
+                (cursor-agent-check-auth)))))))))
 
 ;;;###autoload
 (defun cursor-agent-status ()
@@ -547,10 +631,7 @@ Shell mode allows running shell commands directly from the CLI.
 Commands timeout after 30 seconds and are non-interactive.
 Works in both GUI and terminal Emacs."
   (interactive)
-  (unless (cursor-agent-installed-p)
-    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
-        (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
+  (cursor-agent--ensure-installed)
   ;; Try vterm first if in GUI mode, fallback to shell-mode (works in terminal)
   (if (and (display-graphic-p)
            (require 'vterm nil t))
@@ -584,10 +665,7 @@ Works in both GUI and terminal Emacs."
 (defun cursor-agent-update ()
   "Update cursor-agent CLI to the latest version."
   (interactive)
-  (unless (cursor-agent-installed-p)
-    (if (y-or-n-p "Cursor Agent CLI not found. Would you like to install it now? ")
-        (cursor-agent-install)
-      (user-error "Cursor Agent CLI not found.  Run 'M-x cursor-agent-install' to install")))
+  (cursor-agent--ensure-installed)
   (let ((buffer-name "*cursor-agent-update*"))
     (with-current-buffer (get-buffer-create buffer-name)
       (erase-buffer)
