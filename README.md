@@ -228,7 +228,7 @@ If you want to track the package via Git and get updates:
 
 2. **Run `doom sync`** to install
 
-3. **Add configuration to `~/.config/doom/config.el`:**
+3. **Add configuration to `~/.config/doom/config.el`** — use `after! cursor-agent` only for `setq` and keybindings. **Do not** `unload-feature` or `load` the package in `after!`; that causes recursive load errors (see [Known issues](#known-issues)):
    ```elisp
    (after! cursor-agent
      (setq cursor-agent-default-model "gpt-5")
@@ -252,13 +252,16 @@ If you're developing or want to keep it in a separate directory:
 1. **Add to `~/.config/doom/packages.el`:**
    ```elisp
    (package! cursor-agent
-     :recipe (:local-repo "~/workspaces/personal/cursor-agent.el"
-              :files ("cursor-agent.el")))
+     :recipe (:local-repo "/path/to/cursor-agent.el"   ; or "~/workspaces/personal/cursor-agent.el"
+              :files ("cursor-agent.el")
+              :build (:not compile)))   ; optional: faster iteration when not byte-compiling
    ```
 
 2. **Run `doom sync`**
 
-3. **Configure in `~/.config/doom/config.el`** as shown in Method 2
+3. **Configure in `~/.config/doom/config.el`** as in Method 2. **Do not** `unload-feature` or `load` cursor-agent in `after!` — it causes recursive load errors.
+
+With `:local-repo`, Doom/Straight may only autoload a few commands at startup. Run `M-x cursor-agent-install` (or any autoloaded command) once to load the full file; after that, all commands are available. See [Known issues](#known-issues).
 
 ### Doom Emacs Keybindings
 
@@ -286,9 +289,19 @@ The recommended keybinding layout for Doom Emacs:
 ### Doom Emacs Tips
 
 - **No `doom sync` needed** for Method 1 (local file) - just restart Emacs
-- **Use `after!` macro** for package configuration when using `package!`
+- **Use `after!` macro** for package configuration when using `package!` — only for `setq` and keybindings, **not** for `unload-feature` or `load` of cursor-agent (causes recursive load)
 - **Use `map!` macro** for keybindings (Doom's DSL)
 - **vterm module**: If you have Doom's `:term vterm` module enabled, vterm will be available automatically
+
+## Known issues
+
+### Doom Emacs / Straight: commands unavailable until first use
+
+With Doom and Straight (`package!` with `:local-repo` or `:host github`), only a subset of commands may appear in `M-x` at startup. **Run `M-x cursor-agent-install`** (or any other autoloaded command) **once** to load the full package; after that, all commands are available. This comes from how Doom/Straight generate and apply autoloads; the package itself has `;;;###autoload` on all commands.
+
+### Doom Emacs: do not unload/reload in config
+
+**Do not** use `unload-feature` and `load` (or `load-file`) of `cursor-agent.el` inside an `after! cursor-agent` block. That causes a **recursive load** between the Straight build path and your source path (e.g. workspace or `:local-repo`). Use `after! cursor-agent` only for configuration (`setq`, keybindings). The package is already loaded by Doom/Straight.
 
 ## Compatibility
 
@@ -340,6 +353,24 @@ The package will automatically fall back to `shell-mode`. For better experience,
 ```elisp
 M-x package-install RET vterm RET
 ```
+
+## Testing
+
+Tests are included in `cursor-agent-test.el` using ERT (Emacs Lisp Regression Testing). Run tests locally:
+
+```elisp
+M-x load-file RET cursor-agent-test.el RET
+M-x ert RET cursor-agent-test-.* RET
+```
+
+Or from the command line:
+
+```bash
+emacs --batch -l ert -l cursor-agent.el -l cursor-agent-test.el \
+  --eval "(ert-run-tests-batch-and-exit 'cursor-agent-test-.* t)"
+```
+
+Tests run automatically on GitHub Actions for all pushes and pull requests.
 
 ## Contributing
 
