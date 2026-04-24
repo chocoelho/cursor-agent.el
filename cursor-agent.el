@@ -387,7 +387,7 @@ After installation, prompts to verify setup and optionally authenticate.
         (set-process-sentinel process (cursor-agent--install-sentinel buffer-name)))
       
       ;; Return nil since installation is async
-      nil)))
+      nil))))
 
 ;;;###autoload
 (defun cursor-agent-verify-setup ()
@@ -692,7 +692,7 @@ Opens the README.md file in a new buffer for viewing."
           (find-file readme-file)
           (view-mode)
           (message "Press 'q' to quit view mode"))
-      (user-error "README.md not found.  Please ensure the package is properly installed")))))
+      (user-error "README.md not found.  Please ensure the package is properly installed"))))
 
 (provide 'cursor-agent)
 
